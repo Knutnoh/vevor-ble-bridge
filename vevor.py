@@ -72,6 +72,7 @@ class DieselHeater:
     _service_uuid = "0000fff0-0000-1000-8000-00805f9b34fb"
     _write_characteristic_uuid = "0000fff2-0000-1000-8000-00805f9b34fb"
     _read_characteristic_uuid = "0000fff1-0000-1000-8000-00805f9b34fb"
+    _ble_lock = threading.Lock()
 
    def __init__(self, mac_address: str, passkey: int):
         self._lock = threading.Lock()
@@ -83,26 +84,39 @@ class DieselHeater:
             self.read_characteristic.getHandle() + 1, b'\x01\x00', withResponse=True
         )
 
-    def _send_command(self, command, argument, n):
-        with self._lock:  # Lock verhindert parallele Polls
-            # ... bestehender Code zum Schreiben
+    def _send_command(self, command: int, argument: int, n: int):
+        o = bytearray([0xAA, n % 256, 0, 0, 0, 0, 0, 0])
+        if n == 136:
+            o[2] = random.randint(0, 255)
+            o[3] = random.randint(0, 255)
+        else:
+            o[2] = math.floor(self.passkey / 100)
+            o[3] = self.passkey % 100
+        o[4] = command % 256
+        o[5] = argument % 256
+        o[6] = math.floor(argument / 256)
+        o[7] = o[2] + o[3] + o[4] + o[5] + o[6]
+
+        with DieselHeater._ble_lock:
+            self._last_notification = None
             self.write_characteristic.write(o, withResponse=True)
-            self.peripheral.waitForNotifications(1)
-            return self._last_notification
+            if self.peripheral.waitForNotifications(1) and self._last_notification:
+                return self._last_notification
+        return None
 
     def get_status(self):
-        with self._lock:
-            # Keine internen send_command-Aufrufe
-            if self.peripheral.waitForNotifications(0.5) and self._last_notification:
+        with DieselHeater._ble_lock:
+            if self.peripheral.waitForNotifications(1) and self._last_notification:
                 return self._last_notification
             try:
                 raw = self.read_characteristic.read()
                 if raw:
                     self._last_notification = _DieselHeaterNotification(raw)
                     return self._last_notification
-            except Exception:
-                return None
-                
+            except Exception as e:
+                print(f"Fehler beim Lesen der Characteristic: {e}")
+        return None
+               
     def start(self):
         return self._send_command(3, 1, 85)
 
