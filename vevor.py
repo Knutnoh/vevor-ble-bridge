@@ -126,8 +126,8 @@ class _DieselHeaterDelegate(DefaultDelegate):
 
 
 class DieselHeater:
-    _service_uuid = "0000fff0-0000-1000-8000-00805f9b34fb"       # Primary Service
-    _characteristic_uuid = "0000fff1-0000-1000-8000-00805f9b34fb" # Zum Schreiben/Lesen
+    _service_uuid = "0000fff1-0000-1000-8000-00805f9b34fb"       # Primary Service
+    _characteristic_uuid = "0000fff2-0000-1000-8000-00805f9b34fb" # Zum Schreiben/Lesen
     _last_notification = None
 
     def __init__(self, mac_address: str, passkey: int):
