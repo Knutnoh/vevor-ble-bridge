@@ -262,7 +262,7 @@ def dispatch_result(result):
         if result.error:
             msg = f"{msg} ({result.error_msg})"
 
-        # Statusmeldungen
+        # Statuswerte
         client.publish(f"{mqtt_prefix}/status/state", msg)
         client.publish(f"{mqtt_prefix}/room_temperature/state", result.cab_temperature)
         client.publish(f"{mqtt_prefix}/voltage/state", result.supply_voltage)
@@ -279,13 +279,13 @@ def dispatch_result(result):
     else:
         logger.debug("No result received from device.")
 
-    # Availability sauber setzen
-    client.publish(f"{mqtt_prefix}/start/av", "online" if not result or result.running_step is None else "offline")
-    client.publish(f"{mqtt_prefix}/stop/av", "online" if result and result.running_step == 3 else "offline")
-    client.publish(f"{mqtt_prefix}/level/av", "online" if result and ((result.running_mode in (0,1)) and (result.running_step is not None and result.running_step < 4)) else "offline")
+    # Availability für Home Assistant
+    is_running = result and result.running_step not in (None, 0)  # läuft überhaupt?
+    client.publish(f"{mqtt_prefix}/start/av", "online" if not is_running else "offline")
+    client.publish(f"{mqtt_prefix}/stop/av", "online" if is_running else "offline")
+    client.publish(f"{mqtt_prefix}/level/av", "online" if result and result.running_mode in (0,1) else "offline")
     client.publish(f"{mqtt_prefix}/temperature/av", "online" if result and result.running_mode == 2 else "offline")
-    client.publish(f"{mqtt_prefix}/mode/av", "online" if result and result.running_mode else "offline")
-
+    client.publish(f"{mqtt_prefix}/mode/av", "online" if result else "offline")
 
 
 # The callback for when a PUBLISH message is received from the server.
