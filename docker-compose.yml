@@ -16,4 +16,4 @@ services:
             MQTT_HOST: ${MQTT_HOST}
             MQTT_USERNAME: ${MQTT_USERNAME}
             MQTT_PASSWORD: ${MQTT_PASSWORD}
-            MQTT_PREFIX: ${MQTT_PREFIX}
+            MQTT_PREFIX: "Vevor"
