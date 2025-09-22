@@ -147,7 +147,18 @@ class DieselHeater:
             self._read_characteristic_uuid
         )[0]
 
+        # Notification-Delegate setzen
         self.peripheral.setDelegate(_DieselHeaterDelegate(self))
+
+        # Notifications aktivieren
+        try:
+            self.peripheral.writeCharacteristic(
+                self.read_characteristic.getHandle() + 1,
+                b'\x01\x00',  # Notification aktivieren
+                withResponse=True
+            )
+        except Exception as e:
+            print(f"Fehler beim Aktivieren von Notifications: {e}")
 
     def _send_command(self, command: int, argument: int, n: int):
         o = bytearray([0xAA, n % 256, 0, 0, 0, 0, 0, 0])
@@ -161,9 +172,9 @@ class DieselHeater:
         o[5] = argument % 256
         o[6] = math.floor(argument / 256)
         o[7] = o[2] + o[3] + o[4] + o[5] + o[6]
-        
+
         self._last_notification = None
-        response = self.write_characteristic.write(o, withResponse=True)
+        self.write_characteristic.write(o, withResponse=True)
         if self.peripheral.waitForNotifications(1) and self._last_notification:
             return self._last_notification
         return None
@@ -173,19 +184,19 @@ class DieselHeater:
         Liest den aktuellen Status der Heizung aus.
         Versucht erst Notifications, ansonsten direkt die read_characteristic.
         """
-        # Zuerst Notification abfragen
+        # Notifications abfragen
         if self.peripheral.waitForNotifications(1) and self._last_notification:
             return self._last_notification
     
-        # Wenn keine Notification kommt, direkt lesen
+        # Direkt lesen, falls keine Notification kommt
         try:
-            raw = self.read_characteristic.read()  # bytearray vom Gerät
+            raw = self.read_characteristic.read()
             if raw:
                 self._last_notification = _DieselHeaterNotification(raw)
                 return self._last_notification
         except Exception as e:
             print(f"Fehler beim Lesen der Characteristic: {e}")
-            return None
+        return None
 
     def start(self):
         return self._send_command(3, 1, 85)
@@ -201,4 +212,4 @@ class DieselHeater:
     def set_mode(self, mode):
         if (mode < 1) or (mode > 2):
             raise RuntimeError("Invalid mode")
-        return self._send_command(2, mode, 85)    
+        return self._send_command(2, mode, 85)
