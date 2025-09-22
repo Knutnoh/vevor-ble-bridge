@@ -169,8 +169,23 @@ class DieselHeater:
         return None
 
     def get_status(self):
-        # todo: mode 136
-        return self._send_command(1, 0, 85)
+        """
+        Liest den aktuellen Status der Heizung aus.
+        Versucht erst Notifications, ansonsten direkt die read_characteristic.
+        """
+        # Zuerst Notification abfragen
+        if self.peripheral.waitForNotifications(1) and self._last_notification:
+            return self._last_notification
+    
+        # Wenn keine Notification kommt, direkt lesen
+        try:
+            raw = self.read_characteristic.read()  # bytearray vom Gerät
+            if raw:
+                self._last_notification = _DieselHeaterNotification(raw)
+                return self._last_notification
+        except Exception as e:
+            print(f"Fehler beim Lesen der Characteristic: {e}")
+            return None
 
     def start(self):
         return self._send_command(3, 1, 85)
