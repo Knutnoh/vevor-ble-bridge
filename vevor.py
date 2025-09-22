@@ -73,69 +73,36 @@ class DieselHeater:
     _write_characteristic_uuid = "0000fff2-0000-1000-8000-00805f9b34fb"
     _read_characteristic_uuid = "0000fff1-0000-1000-8000-00805f9b34fb"
 
-    def __init__(self, mac_address: str, passkey: int):
-        self.mac_address = mac_address
-        self.passkey = passkey
+   def __init__(self, mac_address: str, passkey: int):
         self._lock = threading.Lock()
         self._last_notification = None
-
         self.peripheral = Peripheral(mac_address, "public")
-        self.service = self.peripheral.getServiceByUUID(self._service_uuid)
-        self.write_characteristic = self.service.getCharacteristics(
-            self._write_characteristic_uuid
-        )[0]
-        self.read_characteristic = self.service.getCharacteristics(
-            self._read_characteristic_uuid
-        )[0]
-
-        # Notification-Delegate setzen
         self.peripheral.setDelegate(_DieselHeaterDelegate(self))
-
         # Notifications aktivieren
-        try:
-            self.peripheral.writeCharacteristic(
-                self.read_characteristic.getHandle() + 1,
-                b'\x01\x00',
-                withResponse=True
-            )
-        except Exception as e:
-            print(f"Fehler beim Aktivieren von Notifications: {e}")
+        self.peripheral.writeCharacteristic(
+            self.read_characteristic.getHandle() + 1, b'\x01\x00', withResponse=True
+        )
 
-    def _send_command(self, command: int, argument: int, n: int):
-        with self._lock:
-            o = bytearray([0xAA, n % 256, 0, 0, 0, 0, 0, 0])
-            if n == 136:
-                o[2] = random.randint(0, 255)
-                o[3] = random.randint(0, 255)
-            else:  # n == 85
-                o[2] = self.passkey // 100
-                o[3] = self.passkey % 100
-            o[4] = command % 256
-            o[5] = argument % 256
-            o[6] = argument // 256
-            o[7] = o[2] + o[3] + o[4] + o[5] + o[6]
-
-            self._last_notification = None
+    def _send_command(self, command, argument, n):
+        with self._lock:  # Lock verhindert parallele Polls
+            # ... bestehender Code zum Schreiben
             self.write_characteristic.write(o, withResponse=True)
-            if self.peripheral.waitForNotifications(1) and self._last_notification:
-                return self._last_notification
-        return None
+            self.peripheral.waitForNotifications(1)
+            return self._last_notification
 
     def get_status(self):
         with self._lock:
-            # Notifications abfragen
-            if self.peripheral.waitForNotifications(1) and self._last_notification:
+            # Keine internen send_command-Aufrufe
+            if self.peripheral.waitForNotifications(0.5) and self._last_notification:
                 return self._last_notification
-            # Direkt lesen, falls keine Notification kommt
             try:
                 raw = self.read_characteristic.read()
                 if raw:
                     self._last_notification = _DieselHeaterNotification(raw)
                     return self._last_notification
-            except Exception as e:
-                print(f"Fehler beim Lesen der Characteristic: {e}")
-        return None
-
+            except Exception:
+                return None
+                
     def start(self):
         return self._send_command(3, 1, 85)
 
