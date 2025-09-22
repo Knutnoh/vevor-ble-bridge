@@ -126,8 +126,9 @@ class _DieselHeaterDelegate(DefaultDelegate):
 
 
 class DieselHeater:
-    _service_uuid = "0000fff0-0000-1000-8000-00805f9b34fb"       # Primary Service
-    _characteristic_uuid = "0000fff2-0000-1000-8000-00805f9b34fb" # Zum Schreiben/Lesen
+    _service_uuid = "0000fff0-0000-1000-8000-00805f9b34fb"        # Primary Service
+    _write_characteristic_uuid = "0000fff2-0000-1000-8000-00805f9b34fb"  # Zum Schreiben
+    _read_characteristic_uuid  = "0000fff1-0000-1000-8000-00805f9b34fb"  # Zum Lesen
     _last_notification = None
 
     def __init__(self, mac_address: str, passkey: int):
@@ -137,30 +138,32 @@ class DieselHeater:
         self.service = self.peripheral.getServiceByUUID(self._service_uuid)
         if self.service is None:
             raise RuntimeError("Requested service is not supported by peripheral")
-        self.characteristic = self.service.getCharacteristics(
-            self._characteristic_uuid
+        
+        # Characteristics
+        self.write_characteristic = self.service.getCharacteristics(
+            self._write_characteristic_uuid
         )[0]
-        if self.characteristic is None:
-            raise RuntimeError("Requested characteristic is not supported by service")
+        self.read_characteristic = self.service.getCharacteristics(
+            self._read_characteristic_uuid
+        )[0]
+
         self.peripheral.setDelegate(_DieselHeaterDelegate(self))
 
     def _send_command(self, command: int, argument: int, n: int):
         o = bytearray([0xAA, n % 256, 0, 0, 0, 0, 0, 0])
-        if 136 == n:
+        if n == 136:
             o[2] = random.randint(0, 255)
             o[3] = random.randint(0, 255)
-        else:  # 85
+        else:  # n == 85
             o[2] = math.floor(self.passkey / 100)
             o[3] = self.passkey % 100
         o[4] = command % 256
         o[5] = argument % 256
         o[6] = math.floor(argument / 256)
         o[7] = o[2] + o[3] + o[4] + o[5] + o[6]
-        # print("> " + o.hex(' ', 1))
+        
         self._last_notification = None
-        response = self.characteristic.write(
-            o, withResponse=True
-        )  # returns sth like "{'rsp': ['wr']}"
+        response = self.write_characteristic.write(o, withResponse=True)
         if self.peripheral.waitForNotifications(1) and self._last_notification:
             return self._last_notification
         return None
