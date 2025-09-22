@@ -256,54 +256,36 @@ def on_connect(client, userdata, flags, rc):
 
 
 def dispatch_result(result):
-    stop_pub = False
-    start_pub = False
-    level_pub = False
-    temperature_pub = False
-    mode_pub = False
     if result:
         logger.debug(str(result.data()))
         msg = result.running_step_msg
         if result.error:
             msg = f"{msg} ({result.error_msg})"
+
+        # Statusmeldungen
         client.publish(f"{mqtt_prefix}/status/state", msg)
         client.publish(f"{mqtt_prefix}/room_temperature/state", result.cab_temperature)
+        client.publish(f"{mqtt_prefix}/voltage/state", result.supply_voltage)
+        client.publish(f"{mqtt_prefix}/altitude/state", result.altitude)
+        client.publish(f"{mqtt_prefix}/heater_temperature/state", result.case_temperature)
+        client.publish(f"{mqtt_prefix}/level/state", result.set_level)
+        if result.set_temperature is not None:
+            client.publish(f"{mqtt_prefix}/temperature/state", result.set_temperature)
+
+        # Mode-State
         if result.running_mode:
-            client.publish(f"{mqtt_prefix}/mode/av", "online")
             client.publish(f"{mqtt_prefix}/mode/state", modes[result.running_mode - 1])
-            mode_pub = True
-        if result.running_step:
-            client.publish(f"{mqtt_prefix}/voltage/state", result.supply_voltage)
-            client.publish(f"{mqtt_prefix}/altitude/state", result.altitude)
-            client.publish(
-                f"{mqtt_prefix}/heater_temperature/state", result.case_temperature
-            )
-            client.publish(f"{mqtt_prefix}/level/state", result.set_level)
-            if result.set_temperature is not None:
-                client.publish(f"{mqtt_prefix}/temperature/state", result.set_temperature)
-            if ((result.running_mode == 0) or (result.running_mode == 1)) and (result.running_step < 4):
-                client.publish(f"{mqtt_prefix}/level/av", "online")
-                level_pub = True
-            if result.running_mode == 2:
-                client.publish(f"{mqtt_prefix}/temperature/av", "online")
-                temperature_pub = True
-            if result.running_step == 3:
-                client.publish(f"{mqtt_prefix}/stop/av", "online")
-                stop_pub = True
-        else:
-            client.publish(f"{mqtt_prefix}/start/av", "online")
-            start_pub = True
-    if not stop_pub:
-        client.publish(f"{mqtt_prefix}/stop/av", "offline")
-    if not start_pub:
-        client.publish(f"{mqtt_prefix}/start/av", "offline")
-        client.publish(f"{mqtt_prefix}/stop/av", "online")
-    if not level_pub:
-        client.publish(f"{mqtt_prefix}/level/av", "offline")
-    if not temperature_pub:
-        client.publish(f"{mqtt_prefix}/temperature/av", "offline")
-    if not mode_pub:
-        client.publish(f"{mqtt_prefix}/mode/av", "offline")
+
+    else:
+        logger.debug("No result received from device.")
+
+    # Availability sauber setzen
+    client.publish(f"{mqtt_prefix}/start/av", "online" if not result or result.running_step is None else "offline")
+    client.publish(f"{mqtt_prefix}/stop/av", "online" if result and result.running_step == 3 else "offline")
+    client.publish(f"{mqtt_prefix}/level/av", "online" if result and ((result.running_mode in (0,1)) and (result.running_step is not None and result.running_step < 4)) else "offline")
+    client.publish(f"{mqtt_prefix}/temperature/av", "online" if result and result.running_mode == 2 else "offline")
+    client.publish(f"{mqtt_prefix}/mode/av", "online" if result and result.running_mode else "offline")
+
 
 
 # The callback for when a PUBLISH message is received from the server.
