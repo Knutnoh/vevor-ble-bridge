@@ -1,5 +1,6 @@
-from bluepy.btle import Scanner, DefaultDelegate
+from bluepy.btle import Scanner, DefaultDelegate, BTLEDisconnectError
 import os
+import time
 
 HEATER_MAC = os.environ.get("BLE_MAC_ADDRESS", "ec:b1:c3:00:3c:56").lower()
 
@@ -18,7 +19,14 @@ print("[SCAN] Creating scanner...")
 scanner = Scanner().withDelegate(ScanDelegate())
 scan_time = float(os.environ.get("SCAN_TIME", 10.0))
 print(f"[SCAN] Scanning for heater for {scan_time} seconds...")
-devices = scanner.scan(scan_time)
+
+try:
+    devices = scanner.scan(scan_time)
+except BTLEDisconnectError as e:
+    print(f"[SCAN] Scan finished with BTLEDisconnectError: {e}")
+except Exception as e:
+    print(f"[SCAN] Scan finished with exception: {e}")
+
 print("[SCAN] Finished scanning.\n")
 
 for dev in devices:
