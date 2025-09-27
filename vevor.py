@@ -1,9 +1,8 @@
 # Vevor BLE Bridge (angepasst für EC:B1:C3:00:3C:56)
-# 2025 Anpassung für custom BLE Heater
+# 2025 Anpassung für custom BLE Heater mit aktivierten Notifications
 import os
 from bluepy.btle import Peripheral, DefaultDelegate
 import time
-import random
 import math
 import paho.mqtt.client as mqtt
 
@@ -62,6 +61,10 @@ class DieselHeater:
         self.characteristic_notify = self.service.getCharacteristics(self._char_notify_uuid)[0]
         self.characteristic_write  = self.service.getCharacteristics(self._char_write_uuid)[0]
         self.peripheral.setDelegate(_DieselHeaterDelegate(self))
+
+        # Notifications aktivieren (CCCD schreiben)
+        self.peripheral.writeCharacteristic(self.characteristic_notify.getHandle() + 1, b'\x01\x00', withResponse=True)
+
         print(f"[DEBUG] BLE-Verbindung aufgebaut. Services und Characteristics:")
         for svc in self.peripheral.getServices():
             print(f"[DEBUG] Service UUID: {svc.uuid}")
@@ -73,34 +76,30 @@ class DieselHeater:
                        command % 256, argument % 256, argument // 256, 0])
         o[7] = sum(o[:7]) % 256
         self._last_notification = None
-        print(f"[DEBUG] Sending command: {[hex(x) for x in o]}")
         self.characteristic_write.write(o, withResponse=True)
-        if self.peripheral.waitForNotifications(1):
-            print(f"[DEBUG] Notification returned: {self._last_notification.data() if self._last_notification else 'None'}")
-            return self._last_notification
-        print("[DEBUG] No notification received")
+
+        # Warte bis 1 Sekunde auf Notification (falls vorhanden)
+        start = time.time()
+        while time.time() - start < 1:
+            if self.peripheral.waitForNotifications(0.1):
+                return self._last_notification
         return None
 
     def get_status(self):
-        print("[DEBUG] Requesting status")
         return self._send_command(1, 0)
 
     def start(self):
-        print("[DEBUG] Sending START command")
         return self._send_command(3, 1)
 
     def stop(self):
-        print("[DEBUG] Sending STOP command")
         return self._send_command(3, 0)
 
     def set_level(self, level):
-        print(f"[DEBUG] Setting level to {level}")
         if not 1 <= level <= 36:
             raise RuntimeError("Invalid level")
         return self._send_command(4, level)
 
     def set_mode(self, mode):
-        print(f"[DEBUG] Setting mode to {mode}")
         if mode not in (1,2):
             raise RuntimeError("Invalid mode")
         return self._send_command(2, mode)
@@ -109,7 +108,7 @@ class DieselHeater:
 if __name__ == "__main__":
     MAC = os.environ.get("BLE_MAC_ADDRESS", "EC:B1:C3:00:3C:56")
     PASSKEY = int(os.environ.get("BLE_PASSKEY", 1234))
-    POLL_INTERVAL = float(os.environ.get("BLE_POLL_INTERVAL", 2))
+    POLL_INTERVAL = 2
     MQTT_HOST = os.environ.get("MQTT_HOST", "192.168.2.155")
     MQTT_TOPIC = os.environ.get("MQTT_PREFIX", "home/ble/heater/status")
 
